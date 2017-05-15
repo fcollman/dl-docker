@@ -1,4 +1,4 @@
-FROM nvidia/cuda:8.0-cudnn5-devel-ubuntu14.04
+FROM nvidia/cuda:8.0-cudnn5-devel-ubuntu16.04
 
 MAINTAINER Sai Soundararaj <saip@outlook.com>
 
@@ -32,7 +32,6 @@ RUN apt-get update && apt-get install -y \
 		liblcms2-dev \
 		libopenblas-dev \
 		liblapack-dev \
-		libopenjpeg2 \
 		libpng12-dev \
 		libssl-dev \
 		libtiff5-dev \
@@ -190,6 +189,10 @@ RUN pip --no-cache-dir install git+git://github.com/fchollet/keras.git@${KERAS_V
 # Install Lasagne
 RUN pip --no-cache-dir install git+git://github.com/Lasagne/Lasagne.git@${LASAGNE_VERSION}
 
+# Install some dependencies
+RUN apt-get update && apt-get install -y \
+sudo \
+bc
 
 # Install Torch
 RUN git clone https://github.com/torch/distro.git /root/torch --recursive && \
@@ -206,7 +209,8 @@ ENV LUA_PATH='/root/.luarocks/share/lua/5.1/?.lua;/root/.luarocks/share/lua/5.1/
 ENV LUA_CPATH='/root/torch/install/lib/?.so;'$LUA_CPATH
 
 # Install the latest versions of nn, cutorch, cunn, cuDNN bindings and iTorch
-RUN luarocks install nn && \
+RUN luarocks install torch && \
+  luarocks install nn && \
 	luarocks install cutorch && \
 	luarocks install cunn && \
     luarocks install loadcaffe && \
@@ -219,17 +223,61 @@ RUN luarocks install nn && \
 	cd iTorch && \
 	luarocks make
 
+RUN wget https://github.com/opencv/opencv/archive/3.2.0.zip
+RUN mv 3.2.0.zip opencv-3.2.0.zip
+RUN wget https://github.com/opencv/opencv_contrib/archive/3.2.0.zip
+RUN mv 3.2.0.zip opencv-contrib-3.2.0.zip
+RUN unzip opencv-3.2.0.zip
+RUN unzip opencv-contrib-3.2.0.zip
+WORKDIR /opencv-3.2.0
+RUN mkdir build
+WORKDIR build
+RUN apt-get install -y libopenblas-dev libatlas-base-dev gfortran liblapacke-dev checkinstall
+RUN cmake -D CMAKE_BUILD_TYPE=RELEASE \
+     -D CMAKE_INSTALL_PREFIX=/usr/local \
+     -D INSTALL_PYTHON_EXAMPLES=ON \
+     -D INSTALL_C_EXAMPLES=OFF \
+		 -D CUDA_CUDA_LIBRARY=/usr/local/cuda/lib64/stubs/libcuda.so\
+     -D INSTALL_PYTHON_EXAMPLES=ON \
+		 -D WITH_QT=ON \
+		 -D WITH_OPENGL=ON \
+		 -D FORCE_VTK=ON \
+		 -D WITH_TBB=ON \
+		 -D WITH_GDAL=ON \
+		 -D WITH_XINE=ON \
+     -D OPENCV_ENABLE_NONFREE=ON \
+     -D BUILD_opencv_world=OFF \
+     -D OPENCV_EXTRA_MODULES_PATH=/opencv_contrib-3.2.0/modules \
+     -D BUILD_EXAMPLES=ON ..
+RUN	make -j"$(nproc)"
+RUN make install && ldconfig
 # Install OpenCV
-RUN git clone --depth 1 https://github.com/opencv/opencv.git /root/opencv && \
-	cd /root/opencv && \
-	mkdir build && \
-	cd build && \
-	cmake -DWITH_QT=ON -DWITH_OPENGL=ON -DFORCE_VTK=ON -DWITH_TBB=ON -DWITH_GDAL=ON -DWITH_XINE=ON -DBUILD_EXAMPLES=ON .. && \
-	make -j"$(nproc)"  && \
-	make install && \
-	ldconfig && \
-	echo 'ln /dev/null /dev/raw1394' >> ~/.bashrc
-
+#RUN git clone --depth 1 https://github.com/opencv/opencv.git /root/opencv && \
+#git clone --depth 1 https://github.com/opencv/opencv_contrib.git /root/opencv_contrib && \
+#	cd /root/opencv && \
+#	mkdir build && \
+#	cd build && \
+#	cmake \
+#	 -DCUDA_CUDA_LIBRARY=/usr/local/cuda/lib64/stubs/libcuda.so\
+#	 -DOPENCV_EXTRA_MODULES_PATH=/root/opencv_contrib/modules\
+#	 -DWITH_QT=ON \
+#	 -DWITH_OPENGL=ON \
+#	 -DFORCE_VTK=ON \
+#	 -DWITH_TBB=ON \
+#	 -DWITH_GDAL=ON \
+#	 -DWITH_XINE=ON \
+#	 -DBUILD_EXAMPLES=ON .. && \
+#	make -j"$(nproc)"  && \
+#	make install && \
+#	ldconfig && \
+#	echo 'ln /dev/null /dev/raw1394' >> ~/.bashrc
+#RUN make install
+RUN uptime&&uptime
+RUN git clone -b Maxwell https://github.com/fcollman/CudaSift.git /root/CudaSift &&\
+cd /root/CudaSift &&\
+export CUDA_ARCH=sm_50 &&\
+cmake . && make install && \
+python setup.py install
 # Set up notebook config
 COPY jupyter_notebook_config.py /root/.jupyter/
 
